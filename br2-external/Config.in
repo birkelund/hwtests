@@ -1,0 +1,2 @@
+source "$BR2_EXTERNAL_HWTESTS_PATH/package/mctp/Config.in"
+source "$BR2_EXTERNAL_HWTESTS_PATH/package/libnvme/Config.in"

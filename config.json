@@ -1,0 +1,79 @@
+[
+	{
+		"name": "x86_64",
+		"machine": "q35",
+		"kernel": "bzImage",
+		"nic": "virtio"
+	},
+	{
+		"name": "aarch64",
+		"machine": "virt",
+		"cpu": "cortex-a53",
+		"kernel": "Image",
+		"console": "ttyAMA0",
+		"nic": "virtio"
+	},
+	{
+		"name": "riscv32",
+		"machine" : "virt",
+		"kernel": "Image",
+		"nic": "virtio-netdev"
+	},
+	{
+		"name": "riscv64",
+		"machine" : "virt",
+		"kernel": "Image",
+		"nic": "virtio-netdev"
+	},
+	{
+		"name": "sparc64",
+		"machine": "sun4v",
+		"cpu": "TI UltraSparc IIi",
+		"kernel": "vmlinux",
+		"nic": "e1000",
+		"extra_nvme_params": "bus=pciB"
+	},
+	{
+		"name": "mips",
+		"machine": "malta",
+		"cpu": "mips32r6-generic",
+		"kernel": "vmlinux",
+		"nic": "pcnet"
+	},
+	{
+		"name": "mipsel",
+		"machine": "malta",
+		"cpu": "mips32r6-generic",
+		"kernel": "vmlinux",
+		"nic": "pcnet"
+	},
+	{
+		"name": "mips64",
+		"machine": "malta",
+		"cpu": "I6400",
+		"kernel": "vmlinux",
+		"nic": "pcnet"
+	},
+	{
+		"name": "mips64el",
+		"machine": "malta",
+		"cpu": "I6400",
+		"kernel": "vmlinux",
+		"nic": "pcnet"
+	},
+	{
+		"name": "ppc64",
+		"machine": "pseries",
+		"cpu": "POWER7",
+		"kernel": "vmlinux",
+		"console": "hvc0"
+	},
+	{
+		"name": "ppc64le",
+		"arch": "ppc64",
+		"machine": "pseries,x-vof=on",
+		"cpu": "POWER8",
+		"kernel": "vmlinux",
+		"console": "hvc0"
+	}
+]

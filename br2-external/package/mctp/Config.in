@@ -1,0 +1,14 @@
+config BR2_PACKAGE_MCTP
+	bool "mctp"
+	help
+	  This project contains two utilities for running a MCTP network from
+	  the local machine:
+	  
+	    * mctp: A small command-line utility to query and manage the state
+	      of the kernel MCTP stack, in a similar way to iproute2's ip utility.
+	  
+	    * mctpd: A daemon implementing the MCTP control protocol; you'll
+	      need this for the local host to perform as a bus-owner. The main
+	      function of mctpd is to assign EIDs to remote endpoints, and
+	      manage the resulting routes and neighbour-table entries for those
+	      endpoints.
