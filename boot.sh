@@ -18,7 +18,10 @@ dryrun=
 stop_step=
 trace=
 config="./config.json"
-timeout=45
+timeout=200
+iothread=
+ioeventfd=
+iterations=1
 
 default_archs="x86_64 aarch64 riscv32 riscv64 mips mips64 mipsel mips64el ppc64 sparc64"
 default_nvme_params="serial=default,drive=d0"
@@ -38,13 +41,16 @@ Known values for OPTION are:
 
     -h|--help                   display this help and exit
     -q|--quiet                  all outputs are redirected to a logfile per machine
-    -v|--verbose		enable nvme tracing output
+    -v|--verbose                enable nvme tracing output
     -p|--qemu-bindir <DIR>      QEMU system binary directory (default: "$qemu_bindir")
     -b|--basedir <DIR>          base directory (default: "$basedir")
-    -c|--config	<FILE>          configuration file (default: "$config")
+    -c|--config <FILE>          configuration file (default: "$config")
     -n|--dry-run                trial run
-    -t|--trace			add pci_nvme* tracing
+    -t|--trace                  add pci_nvme* tracing
     -s|--step <STEP>            stop at step (i.e. rootfs, net, ...)
+    -o|--option <OPTION>        enable option (iothread,...)
+                                may be specified multiple times
+    -i|--iterations <N>         number of loops per configuration
 
 Default architectures are:
 
@@ -62,8 +68,8 @@ for cmd in jq expect; do
 	fi
 done
 
-shortargs="hqvp:b:ns:c:t:"
-longargs="help,quiet,verbose,basedir:,qemu-bindir:,dry-run,step:,config:,trace:"
+shortargs="hqvp:b:ns:c:t:o:i:"
+longargs="help,quiet,verbose,basedir:,qemu-bindir:,dry-run,step:,config:,trace:,option:,iterations:"
 
 if ! tmp=$(getopt -o "$shortargs" -l "$longargs" -- "$@"); then
 	usage
@@ -112,9 +118,33 @@ while true; do
 			config="$2"
 			shift 2
 			;;
+
 		"-t" | "--trace" )
 			trace=1
 			shift 1
+			;;
+
+		"-i" | "--iterations" )
+			iterations="$2"
+			shift 2
+			;;
+
+		"-o" | "--option" )
+			case "$2" in
+				"iothread" )
+					iothread=1
+					;;
+
+				"ioeventfd" )
+					ioeventfd=1
+					;;
+
+				* )
+					echo "$me: unknown boot option '$2'"
+					exit 1
+					;;
+			esac
+			shift 2
 			;;
 
 		"--" )
@@ -159,6 +189,10 @@ spawn_qemu()
 		emulator="$arch"
 	fi
 
+	if [ "$buildroot" == "null" ]; then
+		buildroot="$name"
+	fi
+
 	qemu_args+=("-m" "$memory")
 
 	# nic
@@ -186,17 +220,26 @@ spawn_qemu()
 	if [ "$bootimg" == "null" ]; then
 		bootimg="rootfs.ext2"
 	fi
-	qemu_args+=("-drive" "file=${basedir}/${name}/images/${bootimg},format=raw,if=none,id=d0")
+	qemu_args+=("-drive" "file=${basedir}/${buildroot}/images/${bootimg},format=raw,if=none,id=d0")
 
 	local nvme_params="$default_nvme_params"
 	if [ "$extra_nvme_params" != "null" ]; then
 		nvme_params="$nvme_params,$extra_nvme_params"
 	fi
 
+	if [ -n "$ioeventfd" ]; then
+		nvme_params="$nvme_params,ioeventfd=on"
+	fi
+
+	if [ -n "$iothread" ]; then
+		qemu_args+=("-object" "iothread,id=nvme")
+		nvme_params="$nvme_params,iothread=nvme"
+	fi
+
 	qemu_args+=("-device" "nvme,$nvme_params")
 
 	# kernel image
-	qemu_args+=("-kernel" "${basedir}/${name}/images/${kernel}")
+	qemu_args+=("-kernel" "${basedir}/${buildroot}/images/${kernel}")
 
 	# kernel parameters
 	if [ "$console" == "null" ]; then
@@ -224,7 +267,7 @@ spawn_qemu()
 
 	if [ -n "$dryrun" ]; then
 		echo "${qemu_builddir}/qemu-system-${emulator} ${qemu_args[*]}"
-		return 0
+		exit 1
 	fi
 
 	expect - <<EOF 2>&3
@@ -404,12 +447,13 @@ tests_archs=${*:-"$default_archs"}
 exec 3>&1
 
 for a in $tests_archs; do
+	for i in $(seq -f "%03g" 1 $iterations); do
 	logfile="${a}.log"
 
 	rm -f "$logfile"
 
 	jq -c ".[] | select(.name==\"$a\")" "$config" | while read -r entry; do
-		for field in name arch machine cpu memory bootimg kernel nic console extra_nvme_params extra_kernel_params; do
+		for field in name buildroot arch machine cpu memory bootimg kernel nic console extra_nvme_params extra_kernel_params; do
 			eval $field=\""$(echo "$entry" | jq -r .$field)"\"
 		done
 
@@ -417,11 +461,17 @@ for a in $tests_archs; do
 			exec 1>>"$logfile" 2>&1
 		fi
 
-		echo -n "$a:" >&3
+		printf "boot %s (%s/%03d):" "$a" "$i" "$iterations" >&3
 
 		begin=$(date +%s)
-		spawn_qemu && pass=$PASSED || pass=$FAILED
+		if spawn_qemu; then
+			pass=$PASSED
+		else
+			pass=$FAILED
+			cp $logfile failed.log
+		fi
 		end=$(date +%s)
 		echo " $pass ($((end-begin))s)" >&3
+	done
 	done
 done
