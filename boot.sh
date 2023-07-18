@@ -23,7 +23,7 @@ iothread=
 ioeventfd=
 iterations=1
 
-default_archs="x86_64 aarch64 riscv32 riscv64 mips mips64 mipsel mips64el ppc64 sparc64"
+default_archs="aarch64 mips32 mips32el mips64 mips64el ppc64 ppc64le riscv32 riscv64 sparc64 x86_64"
 default_nvme_params="serial=default,drive=d0"
 
 PASSED="[32;1mPASSED[0m"
