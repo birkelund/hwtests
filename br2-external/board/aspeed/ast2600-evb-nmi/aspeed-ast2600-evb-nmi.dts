@@ -1,4 +1,4 @@
-#include "aspeed-ast2600-evb.dts"
+#include "aspeed/aspeed-ast2600-evb.dts"
 #include <dt-bindings/i2c/i2c.h>
 
 &i2c15 {
