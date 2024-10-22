@@ -1,6 +1,8 @@
+
 [
 	{
 		"name": "aarch64",
+		"defconfig": "qemu_aarch64_virt_defconfig",
 		"machine": "virt",
 		"cpu": "cortex-a53",
 		"kernel": "Image",
@@ -8,7 +10,8 @@
 		"nic": "virtio"
 	},
 	{
-		"name": "mips32",
+		"name": "mips32r6",
+		"defconfig": "qemu_mips32r6_malta_defconfig",
 		"arch": "mips",
 		"machine": "malta",
 		"cpu": "mips32r6-generic",
@@ -16,7 +19,8 @@
 		"nic": "pcnet"
 	},
 	{
-		"name": "mips32el",
+		"name": "mips32r6el",
+		"defconfig": "qemu_mips32r6el_malta_defconfig",
 		"arch": "mipsel",
 		"machine": "malta",
 		"cpu": "mips32r6-generic",
@@ -24,14 +28,18 @@
 		"nic": "pcnet"
 	},
 	{
-		"name": "mips64",
+		"name": "mips64r6",
+		"defconfig": "qemu_mips64r6_malta_defconfig",
+		"arch": "mips64",
 		"machine": "malta",
 		"cpu": "I6400",
 		"kernel": "vmlinux",
 		"nic": "pcnet"
 	},
 	{
-		"name": "mips64el",
+		"name": "mips64r6el",
+		"defconfig": "qemu_mips64r6el_malta_defconfig",
+		"arch": "mips64el",
 		"machine": "malta",
 		"cpu": "I6400",
 		"kernel": "vmlinux",
@@ -39,6 +47,7 @@
 	},
 	{
 		"name": "ppc64",
+		"defconfig": "qemu_ppc64_pseries_defconfig",
 		"machine": "pseries",
 		"cpu": "POWER7",
 		"kernel": "vmlinux",
@@ -46,6 +55,7 @@
 	},
 	{
 		"name": "ppc64le",
+		"defconfig": "qemu_ppc64le_pseries_defconfig",
 		"arch": "ppc64",
 		"machine": "pseries,x-vof=on",
 		"cpu": "POWER8",
@@ -54,18 +64,28 @@
 	},
 	{
 		"name": "riscv32",
+		"defconfig": "qemu_riscv32_virt_defconfig",
 		"machine" : "virt",
 		"kernel": "Image",
 		"nic": "virtio-netdev"
 	},
 	{
 		"name": "riscv64",
+		"defconfig": "qemu_riscv64_virt_defconfig",
 		"machine": "virt",
 		"kernel": "Image",
 		"nic": "virtio-netdev"
 	},
 	{
+		"name": "s390x",
+		"defconfig": "qemu_s390x_defconfig",
+		"machine": "s390-ccw-virtio",
+		"kernel": "bzImage",
+		"nic": "virtio"
+	},
+	{
 		"name": "sparc64",
+		"defconfig": "qemu_sparc64_sun4u_defconfig",
 		"machine": "sun4v",
 		"cpu": "TI UltraSparc IIi",
 		"kernel": "vmlinux",
@@ -74,6 +94,7 @@
 	},
 	{
 		"name": "x86_64",
+		"defconfig": "qemu_x86_64_defconfig",
 		"machine": "q35",
 		"kernel": "bzImage",
 		"nic": "virtio"

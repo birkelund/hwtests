@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+#
+# This file is part of hwtests.
+#
+# Copyright (C) 2024 The hwtests Authors. All Rights Reserved.
+#
+# This tool (hwtests) is licensed under the GNU General Public License version
+# 3.0 or later. See the COPYING file for more information.
+
+TARGETS=()
+
+while read -r entry; do
+	TARGETS+=("$entry")
+done < <(jq -rc '.[] | .name' config.json)

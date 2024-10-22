@@ -8,7 +8,13 @@
 # This work is licensed under the terms of the GNU GPL version 2. See
 # the COPYING file in the top-level directory.
 
+set -euo pipefail
+
+source common/rc
+
 me=${0##*/}
+
+spawn_id=
 
 qemu_bindir="/usr/bin"
 basedir="."
@@ -18,22 +24,26 @@ dryrun=
 stop_step=
 trace=
 config="./config.json"
-timeout=200
+timeout=60
 iothread=
 ioeventfd=
+nomsi=
+mqes=
 iterations=1
 
-default_archs="aarch64 mips32 mips32el mips64 mips64el ppc64 ppc64le riscv32 riscv64 sparc64 x86_64"
 default_nvme_params="serial=default,drive=d0"
 
 PASSED="[32;1mPASSED[0m"
 FAILED="[31;1mFAILED[0m"
 WARN="[33;1mWARN[0m"
+SKIPPED="[33;1mSKIPPED[0m"
+
+ERR_SKIPPED=42
 
 usage()
 {
 	cat <<EOF
-$me 2.0
+$me
 
 Usage: $me [OPTION] <machine> ...
 
@@ -52,9 +62,9 @@ Known values for OPTION are:
                                 may be specified multiple times
     -i|--iterations <N>         number of loops per configuration
 
-Default architectures are:
+Default targets are:
 
-    $default_archs
+    ${TARGETS[@]}
 
 EOF
 exit 1
@@ -68,8 +78,8 @@ for cmd in jq expect; do
 	fi
 done
 
-shortargs="hqvp:b:ns:c:t:o:i:"
-longargs="help,quiet,verbose,basedir:,qemu-bindir:,dry-run,step:,config:,trace:,option:,iterations:"
+shortargs="hqvp:b:ns:c:to:i:"
+longargs="help,quiet,verbose,basedir:,qemu-bindir:,dry-run,step:,config:,trace,option:,iterations:"
 
 if ! tmp=$(getopt -o "$shortargs" -l "$longargs" -- "$@"); then
 	usage
@@ -139,6 +149,14 @@ while true; do
 					ioeventfd=1
 					;;
 
+				"nomsi" )
+					nomsi=1
+					;;
+
+				"mqes="* )
+					mqes="${2##mqes=}"
+					;;
+
 				* )
 					echo "$me: unknown boot option '$2'"
 					exit 1
@@ -181,6 +199,11 @@ spawn_qemu()
 	# memory
 	if [ "$memory" == "null" ]; then
 		memory="512M"
+	fi
+
+	# smp
+	if [ "$smp" != "null" ]; then
+		qemu_args+=("-smp" "$smp")
 	fi
 
 	# emulator
@@ -236,6 +259,10 @@ spawn_qemu()
 		nvme_params="$nvme_params,iothread=nvme"
 	fi
 
+	if [ -n "$mqes" ]; then
+		nvme_params="$nvme_params,mqes=$mqes"
+	fi
+
 	qemu_args+=("-device" "nvme,$nvme_params")
 
 	# kernel image
@@ -250,6 +277,14 @@ spawn_qemu()
 
 	if [ "$extra_kernel_params" != "null" ]; then
 		kernel_params="$kernel_params $extra_kernel_params"
+	fi
+
+	if [ -n "$nomsi" ]; then
+		if [ "$emulator" = "s390x" ]; then
+			return $ERR_SKIPPED
+		fi
+
+		kernel_params="$kernel_params pci=nomsi"
 	fi
 
 	qemu_args+=("-append" "\"$kernel_params\"")
@@ -330,8 +365,8 @@ expect {
 	}
 
         "timeout, completion polled" {
-                error " NVME TIMEOUT"
-                exit 6
+		warn " NVME TIMEOUT (CQE POLLED)"
+		exp_continue
         }
 
 	"timeout, aborting" {
@@ -384,8 +419,8 @@ expect {
 	}
 
         "timeout, completion polled" {
-                error " NVME TIMEOUT"
-                exit 6
+		warn " NVME TIMEOUT (CQE POLLED)"
+		exp_continue
         }
 
 	"timeout, aborting" {
@@ -413,8 +448,8 @@ expect {
 	}
 
         "timeout, completion polled" {
-                error " NVME TIMEOUT"
-                exit 6
+		warn " NVME TIMEOUT (CQE POLLED)"
+		exp_continue
         }
 
 	"timeout, aborting" {
@@ -432,7 +467,12 @@ expect {
 		exit 0
 	}
 
-	"reboot: System halted" {
+	-re "reboot: (Power off not available: )?System halted( instead)?" {
+		info " poweroff"
+		exit 0
+	}
+
+	"Requesting system poweroff" {
 		info " poweroff"
 		exit 0
 	}
@@ -442,36 +482,48 @@ expect -i $spawn_id eof
 EOF
 }
 
-tests_archs=${*:-"$default_archs"}
-
 exec 3>&1
 
-for a in $tests_archs; do
+if [ -n "$quiet" ]; then
+	exec 2>&1
+fi
+
+targets=(${*:-"${TARGETS[@]}"})
+
+for target in "${targets[@]}"; do
+	logfile="${target}.log"
+
 	for i in $(seq -f "%03g" 1 $iterations); do
-	logfile="${a}.log"
+		rm -f "$logfile"
 
-	rm -f "$logfile"
+		jq -c ".[] | select(.name==\"$target\")" "$config" | while read -r entry; do
+			for field in name buildroot arch machine cpu smp memory bootimg kernel nic console extra_nvme_params extra_kernel_params; do
+				eval $field=\""$(echo "$entry" | jq -r .$field)"\"
+			done
 
-	jq -c ".[] | select(.name==\"$a\")" "$config" | while read -r entry; do
-		for field in name buildroot arch machine cpu memory bootimg kernel nic console extra_nvme_params extra_kernel_params; do
-			eval $field=\""$(echo "$entry" | jq -r .$field)"\"
+			if [ -n "$quiet" ]; then
+				exec 1>"$logfile"
+			fi
+
+			printf "boot %s (%s/%03d):" "$target" "$i" "$iterations" >&3
+
+			begin=$(date +%s)
+			spawn_qemu
+			ret=$?
+			case $ret in
+				0 )
+					pass=$PASSED
+					;;
+				42 )
+					pass=$SKIPPED
+					;;
+				* )
+					pass=$FAILED
+					cp "$logfile" "${target}.failed-${i}.log"
+					;;
+			esac
+			end=$(date +%s)
+			echo " $pass ($((end-begin))s)" >&3
 		done
-
-		if [ -n "$quiet" ]; then
-			exec 1>>"$logfile" 2>&1
-		fi
-
-		printf "boot %s (%s/%03d):" "$a" "$i" "$iterations" >&3
-
-		begin=$(date +%s)
-		if spawn_qemu; then
-			pass=$PASSED
-		else
-			pass=$FAILED
-			cp $logfile failed.log
-		fi
-		end=$(date +%s)
-		echo " $pass ($((end-begin))s)" >&3
-	done
 	done
 done
