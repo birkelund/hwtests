@@ -17,12 +17,11 @@ me=${0##*/}
 spawn_id=
 
 qemu_bindir="/usr/bin"
-basedir="."
+targetdir="$(pwd)/targets"
 quiet=
-verbose=
+trace=
 dryrun=
 stop_step=
-trace=
 config="./config.json"
 timeout=60
 iothread=
@@ -38,35 +37,48 @@ FAILED="[31;1mFAILED[0m"
 WARN="[33;1mWARN[0m"
 SKIPPED="[33;1mSKIPPED[0m"
 
-ERR_SKIPPED=42
+RC_SKIPPED=77
 
 usage()
 {
 	cat <<EOF
 $me
 
-Usage: $me [OPTION] <machine> ...
+Usage: $me [GLOBAL OPTION] TARGETS...
 
-Known values for OPTION are:
+Known values for GLOBAL OPTION are:
 
     -h|--help                   display this help and exit
     -q|--quiet                  all outputs are redirected to a logfile per machine
-    -v|--verbose                enable nvme tracing output
+    -T|--trace                  enable nvme tracing output
     -p|--qemu-bindir <DIR>      QEMU system binary directory (default: "$qemu_bindir")
-    -b|--basedir <DIR>          base directory (default: "$basedir")
+    -t|--targetdir <DIR>        targets directory (default: "$targetdir")
     -c|--config <FILE>          configuration file (default: "$config")
     -n|--dry-run                trial run
-    -t|--trace                  add pci_nvme* tracing
     -s|--step <STEP>            stop at step (i.e. rootfs, net, ...)
-    -o|--option <OPTION>        enable option (iothread,...)
-                                may be specified multiple times
     -i|--iterations <N>         number of loops per configuration
+    -o|--option <OPTION>        enable option (may be specified multiple times)
+
+Known values for OPTION are:
+    ioeventfd                   enable ioeventfd
+    iothread                    enable iothread
+    nomsi                       disable msi/msi-x
+    mqes=N                      configure MQES
 
 Default targets are:
 
-    ${TARGETS[@]}
+    ${DEFAULT_TARGETS[@]}
+
+Other targets (broken):
 
 EOF
+
+broken=
+for target in ${BROKEN_TARGETS[@]}; do
+	reason=$(jq -rc ".[] | select(.name == \"$target\") | .broken" "$config")
+	broken="$broken$target:($reason)\n"
+done
+echo -e $broken | column -t -s ':' | awk '{ print "    "$0 }'
 exit 1
 }
 
@@ -78,8 +90,8 @@ for cmd in jq expect; do
 	fi
 done
 
-shortargs="hqvp:b:ns:c:to:i:"
-longargs="help,quiet,verbose,basedir:,qemu-bindir:,dry-run,step:,config:,trace,option:,iterations:"
+shortargs="hqTp:t:ns:c:o:i:"
+longargs="help,quiet,trace,targetdir:,qemu-bindir:,dry-run,step:,config:,option:,iterations:"
 
 if ! tmp=$(getopt -o "$shortargs" -l "$longargs" -- "$@"); then
 	usage
@@ -99,8 +111,8 @@ while true; do
 			shift 1
 			;;
 
-		"-v" | "--verbose" )
-			verbose=1
+		"-T" | "--trace" )
+			trace=1
 			shift 1
 			;;
 
@@ -109,8 +121,8 @@ while true; do
 			shift 2
 			;;
 
-		"-b" | "--basedir" )
-			basedir="$2"
+		"-t" | "--targetdir" )
+			targetdir="$2"
 			shift 2
 			;;
 
@@ -127,11 +139,6 @@ while true; do
 		"-c" | "--config" )
 			config="$2"
 			shift 2
-			;;
-
-		"-t" | "--trace" )
-			trace=1
-			shift 1
 			;;
 
 		"-i" | "--iterations" )
@@ -176,12 +183,7 @@ while true; do
 	esac
 done
 
-# sanitize
-if [ -n "$verbose" ] && [ -n "$quiet" ]; then
-	quiet=
-fi
-
-spawn_qemu()
+configure_qemu_args()
 {
 	qemu_args=()
 
@@ -207,9 +209,16 @@ spawn_qemu()
 	fi
 
 	# emulator
-	emulator="$name"
+	if [ "$emulator" == "null" ]; then
+		emulator="$name"
+	fi
+
 	if [ "$arch" != "null" ]; then
 		emulator="$arch"
+	fi
+
+	if [ "$kvm" != "null" ]; then
+		qemu_args+=("--enable-kvm")
 	fi
 
 	if [ "$buildroot" == "null" ]; then
@@ -243,7 +252,7 @@ spawn_qemu()
 	if [ "$bootimg" == "null" ]; then
 		bootimg="rootfs.ext2"
 	fi
-	qemu_args+=("-drive" "file=${basedir}/${buildroot}/images/${bootimg},format=raw,if=none,id=d0")
+	qemu_args+=("-drive" "file=${targetdir}/${buildroot}/images/${bootimg},format=raw,if=none,id=d0")
 
 	local nvme_params="$default_nvme_params"
 	if [ "$extra_nvme_params" != "null" ]; then
@@ -266,7 +275,7 @@ spawn_qemu()
 	qemu_args+=("-device" "nvme,$nvme_params")
 
 	# kernel image
-	qemu_args+=("-kernel" "${basedir}/${buildroot}/images/${kernel}")
+	qemu_args+=("-kernel" "${targetdir}/${buildroot}/images/${kernel}")
 
 	# kernel parameters
 	if [ "$console" == "null" ]; then
@@ -280,29 +289,23 @@ spawn_qemu()
 	fi
 
 	if [ -n "$nomsi" ]; then
-		if [ "$emulator" = "s390x" ]; then
-			return $ERR_SKIPPED
-		fi
-
 		kernel_params="$kernel_params pci=nomsi"
 	fi
 
 	qemu_args+=("-append" "\"$kernel_params\"")
 
-	if [ -n "$trace" ]; then
-		qemu_args+=("-trace" "\"pci_nvme*\"")
-	fi
-
 	# serial console on stdout
 	qemu_args+=("-serial" "stdio")
 
-	if [ -n "$verbose" ]; then
-		qemu_args+=("-trace" "pci_nvme*")
+	if [ -n "$trace" ]; then
+		qemu_args+=("-trace" "\"pci_nvme*\"")
 	fi
+}
 
-	if [ -n "$dryrun" ]; then
-		echo "${qemu_builddir}/qemu-system-${emulator} ${qemu_args[*]}"
-		exit 1
+spawn_qemu()
+{
+	if [ "$emulator" = "s390x" -a -n "$nomsi" ]; then
+		return $RC_SKIPPED
 	fi
 
 	expect - <<EOF 2>&3
@@ -488,7 +491,7 @@ if [ -n "$quiet" ]; then
 	exec 2>&1
 fi
 
-targets=(${*:-"${TARGETS[@]}"})
+targets=(${*:-"${DEFAULT_TARGETS[@]}"})
 
 for target in "${targets[@]}"; do
 	logfile="${target}.log"
@@ -497,9 +500,16 @@ for target in "${targets[@]}"; do
 		rm -f "$logfile"
 
 		jq -c ".[] | select(.name==\"$target\")" "$config" | while read -r entry; do
-			for field in name buildroot arch machine cpu smp memory bootimg kernel nic console extra_nvme_params extra_kernel_params; do
+			for field in name emulator buildroot arch machine cpu smp memory bootimg kernel nic console extra_nvme_params extra_kernel_params kvm; do
 				eval $field=\""$(echo "$entry" | jq -r .$field)"\"
 			done
+
+			configure_qemu_args
+
+			if [ -n "$dryrun" ]; then
+				echo "${qemu_builddir}/qemu-system-${emulator} ${qemu_args[*]}"
+				continue
+			fi
 
 			if [ -n "$quiet" ]; then
 				exec 1>"$logfile"
@@ -508,13 +518,15 @@ for target in "${targets[@]}"; do
 			printf "boot %s (%s/%03d):" "$target" "$i" "$iterations" >&3
 
 			begin=$(date +%s)
+			set +e
 			spawn_qemu
 			ret=$?
+			set -e
 			case $ret in
 				0 )
 					pass=$PASSED
 					;;
-				42 )
+				$RC_SKIPPED )
 					pass=$SKIPPED
 					;;
 				* )

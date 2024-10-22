@@ -1,4 +1,3 @@
-
 [
 	{
 		"name": "aarch64",
@@ -11,6 +10,7 @@
 	},
 	{
 		"name": "mips32r6",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_mips32r6_malta_defconfig",
 		"arch": "mips",
 		"machine": "malta",
@@ -20,6 +20,7 @@
 	},
 	{
 		"name": "mips32r6el",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_mips32r6el_malta_defconfig",
 		"arch": "mipsel",
 		"machine": "malta",
@@ -29,6 +30,7 @@
 	},
 	{
 		"name": "mips64r6",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_mips64r6_malta_defconfig",
 		"arch": "mips64",
 		"machine": "malta",
@@ -38,6 +40,7 @@
 	},
 	{
 		"name": "mips64r6el",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_mips64r6el_malta_defconfig",
 		"arch": "mips64el",
 		"machine": "malta",
@@ -64,6 +67,7 @@
 	},
 	{
 		"name": "riscv32",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_riscv32_virt_defconfig",
 		"machine" : "virt",
 		"kernel": "Image",
@@ -71,6 +75,7 @@
 	},
 	{
 		"name": "riscv64",
+		"broken": "buggy irqs",
 		"defconfig": "qemu_riscv64_virt_defconfig",
 		"machine": "virt",
 		"kernel": "Image",
@@ -98,6 +103,15 @@
 		"machine": "q35",
 		"kernel": "bzImage",
 		"nic": "virtio"
+	},
+	{
+		"name": "x86_64-kvm",
+		"emulator": "x86_64",
+		"buildroot": "x86_64",
+		"defconfig": "qemu_x86_64_defconfig",
+		"machine": "q35",
+		"kernel": "bzImage",
+		"nic": "virtio",
+		"kvm": "yes"
 	}
-
 ]

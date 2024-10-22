@@ -13,3 +13,15 @@ TARGETS=()
 while read -r entry; do
 	TARGETS+=("$entry")
 done < <(jq -rc '.[] | .name' config.json)
+
+BROKEN_TARGETS=()
+
+while read -r entry; do
+	BROKEN_TARGETS+=("$entry")
+done < <(jq -rc '.[] | select(has("broken")) | .name' config.json)
+
+DEFAULT_TARGETS=()
+
+while read -r entry; do
+	DEFAULT_TARGETS+=("$entry")
+done < <(jq -rc '.[] | select(has("broken") | not) | .name' config.json)
