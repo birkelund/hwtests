@@ -11,7 +11,7 @@ spawn_id=
 DONE="[32;1mDONE[0m"
 FAILED="[31;1mFAILED[0m"
 
-targetdir="$(pwd)"
+targetdir="$(pwd)/targets"
 quiet=
 override_linux=
 
@@ -20,7 +20,7 @@ usage()
 	cat <<EOF
 $me
 
-Usage: $me [OPTION] TARGET ...
+Usage: $me [OPTION] TARGETS...
 
 Known values for OPTION are:
 

@@ -9,7 +9,7 @@ me=${0##*/}
 spawn_id=
 
 basedir=
-targetdir="./targets"
+targetdir="$(pwd)/targets"
 quiet=
 
 usage()
@@ -17,7 +17,7 @@ usage()
 	cat <<EOF
 $me
 
-Usage: $me [OPTION] TARGET ...
+Usage: $me [OPTION] TARGETS...
 
 Known values for OPTION are:
 
@@ -92,21 +92,18 @@ fi
 export PATH="${basedir}/utils:${PATH}"
 export BR2_EXTERNAL="$(pwd)/br2-external"
 
-pushd "${basedir}" >/dev/null
-
 targets=(${*:-"${TARGETS[@]}"})
 
 for target in "${targets[@]}"; do
 	defconfig="$(jq -rc ".[] | select(.name == \"$target\") | .defconfig" config.json)"
 
+	pushd "${basedir}" >/dev/null
 	make O="${targetdir}/${target}" "$defconfig"
+	popd >/dev/null
 
 	echo "building $target using $defconfig"
+
 	pushd "${targetdir}/${target}" >/dev/null
-
 	brmake
-
 	popd >/dev/null
 done
-
-popd >/dev/null
